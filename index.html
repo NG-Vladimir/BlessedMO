@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Bless Morning: TITAN v40</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
+
+    <style>
+        /* --- БАЗОВЫЕ СТИЛИ --- */
+        body { 
+            background-color: #f1f5f9;
+            color: #334155; 
+            font-family: 'Outfit', sans-serif; 
+            min-height: 100vh; 
+            padding-bottom: 160px;
+            -webkit-tap-highlight-color: transparent; 
+            user-select: none;
+            overflow-x: hidden;
+        }
+
+        /* --- СТЕКЛЯННЫЕ ПАНЕЛИ --- */
+        .glass-panel { 
+            background: rgba(255, 255, 255, 0.7); 
+            backdrop-filter: blur(25px); 
+            -webkit-backdrop-filter: blur(25px); 
+            border-radius: 24px; 
+            border: 1px solid rgba(255, 255, 255, 0.9); 
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.08);
+            transition: all 0.3s ease;
+        }
+
+        /* --- КНОПКИ УПРАЖНЕНИЙ --- */
+        .glass-btn { 
+            background: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+            border: 1px solid #e2e8f0;
+            border-radius: 20px;
+            color: #94a3b8;
+            font-weight: 800;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.02);
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        .glass-btn:active { transform: scale(0.95); }
+
+        /* ЦВЕТОВЫЕ СХЕМЫ АКТИВНЫХ КНОПОК */
+        .active-blue { 
+            background: #3b82f6 !important; color: white !important; border-color: #3b82f6 !important;
+            box-shadow: 0 8px 20px rgba(59, 130, 246, 0.4); transform: translateY(-2px);
+        }
+        .active-purple { 
+            background: #a855f7 !important; color: white !important; border-color: #a855f7 !important;
+            box-shadow: 0 8px 20px rgba(168, 85, 247, 0.4); transform: translateY(-2px);
+        }
+        .active-green { 
+            background: #10b981 !important; color: white !important; border-color: #10b981 !important;
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4); transform: translateY(-2px);
+        }
+        .active-rose { 
+            background: #f43f5e !important; color: white !important; border-color: #f43f5e !important;
+            box-shadow: 0 8px 20px rgba(244, 63, 94, 0.4); transform: translateY(-2px);
+        }
+
+        /* --- ТУМБЛЕРЫ --- */
+        .toggle-switch {
+            width: 50px; height: 30px; border-radius: 99px;
+            background: #cbd5e1; position: relative; transition: 0.3s; cursor: pointer;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .toggle-switch::after {
+            content: ''; position: absolute; left: 3px; top: 3px;
+            width: 24px; height: 24px; background: white; border-radius: 50%;
+            transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        .toggle-switch.active { background: #8b5cf6; }
+        .toggle-switch.active::after { transform: translateX(20px); }
+
+        /* --- ПРОГРЕСС БАР --- */
+        .progress-container { background: rgba(0,0,0,0.05); border-radius: 99px; padding: 3px; }
+        .progress-fill { border-radius: 99px; transition: width 1s ease-out; }
+        
+        /* --- ИКОНКИ ДОСТИЖЕНИЙ --- */
+        .badge { 
+            opacity: 0.3; transform: scale(0.9); transition: all 0.5s; 
+            filter: grayscale(100%); cursor: pointer;
+        }
+        .badge.unlocked { 
+            opacity: 1; transform: scale(1.1); filter: grayscale(0%); 
+            filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.5));
+            color: #3b82f6;
+        }
+
+        /* --- КАЛЕНДАРЬ --- */
+        .cal-day { 
+            aspect-ratio: 1; border-radius: 12px; font-size: 10px; font-weight: 800; 
+            display: flex; align-items: center; justify-content: center; 
+            border: 1px solid rgba(255,255,255,0.5); color: #94a3b8;
+            background: rgba(255,255,255,0.3);
+        }
+        .cal-day.active { background: #3b82f6; color: white; border: none; box-shadow: 0 4px 10px rgba(59,130,246,0.3); }
+
+        /* --- UI ЭЛЕМЕНТЫ --- */
+        .ctrl-btn {
+            width: 24px; height: 24px; border-radius: 8px; 
+            display: flex; align-items: center; justify-content: center;
+            background: #eff6ff; color: #3b82f6; font-weight: bold; font-size: 14px;
+            cursor: pointer; transition: 0.2s;
+        }
+        .ctrl-btn:active { background: #3b82f6; color: white; }
+
+        /* --- АНИМАЦИИ --- */
+        @keyframes slideUp { from { transform: translateY(30px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .anim-enter { animation: slideUp 0.5s ease-out forwards; }
+        
+        @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.4); } 70% { box-shadow: 0 0 0 15px rgba(59, 130, 246, 0); } 100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); } }
+        .timer-pulse { animation: pulse-ring 2s infinite; }
+
+        .nav-icon { transition: 0.3s; }
+        .nav-btn.active .nav-icon { color: #3b82f6; transform: translateY(-2px); filter: drop-shadow(0 4px 6px rgba(59,130,246,0.3)); }
+    </style>
+</head>
+<body>
+
+    <div id="screen-setup" class="fixed inset-0 z-[2000] bg-[#f1f5f9] flex items-center justify-center p-6 hidden">
+        <div class="glass-panel p-10 w-full max-w-sm text-center anim-enter relative">
+            <button onclick="closeSetup()" id="close-setup-btn" class="absolute top-4 right-4 text-slate-400 p-2 hidden">✕</button>
+            <h1 class="text-4xl font-black text-slate-800 mb-2 uppercase tracking-tighter">Bless<br><span class="text-blue-500">Morning</span></h1>
+            <p class="text-slate-400 text-xs font-bold uppercase tracking-[0.2em] mb-8">Personal Trainer v40</p>
+            
+            <div class="space-y-4">
+                <input type="text" id="setup-name" placeholder="Твое имя" class="w-full h-14 px-6 rounded-2xl border-2 border-white bg-white/50 text-center font-bold text-lg outline-none focus:border-blue-400 transition shadow-sm">
+                <div class="flex gap-4">
+                    <input type="number" id="setup-weight" placeholder="Вес (кг)" class="w-1/2 h-14 px-4 rounded-2xl border-2 border-white bg-white/50 text-center font-bold outline-none focus:border-blue-400 shadow-sm">
+                    <input type="number" id="setup-height" placeholder="Рост (см)" class="w-1/2 h-14 px-4 rounded-2xl border-2 border-white bg-white/50 text-center font-bold outline-none focus:border-blue-400 shadow-sm">
+                </div>
+            </div>
+
+            <button onclick="finishSetup()" class="w-full h-14 mt-8 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-blue-500/30 active:scale-95 transition">Сохранить</button>
+        </div>
+    </div>
+
+    <div id="screen-workout" class="px-6 pt-10 pb-24 anim-enter hidden">
+        <header class="flex justify-between items-end mb-8">
+            <div>
+                <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1" id="display-date">...</p>
+                <h2 class="text-3xl font-black text-slate-800 leading-none" id="display-name">Привет!</h2>
+                <p class="text-xs text-blue-500 font-bold mt-2" id="daily-quote">"Встань и делай."</p>
+            </div>
+            <div class="glass-panel px-4 py-3 flex flex-col items-center min-w-[70px]">
+                <span class="text-2xl">🔥</span>
+                <span class="font-black text-lg text-slate-700 leading-none mt-1" id="display-streak">0</span>
+            </div>
+        </header>
+
+        <div onclick="toggleWarmup()" class="glass-panel p-5 mb-8 flex items-center justify-between cursor-pointer border border-white/60">
+            <div>
+                <h3 class="font-black text-slate-700 uppercase text-sm">Разминка</h3>
+                <p class="text-[10px] font-bold transition-colors duration-300" id="warmup-text">Нажми перед стартом</p>
+            </div>
+            <div id="warmup-switch" class="toggle-switch"></div>
+        </div>
+
+        <div class="glass-panel p-6 mb-8 relative overflow-hidden">
+            <div class="absolute right-0 top-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl -mr-10 -mt-10"></div>
+            <div class="flex justify-between items-end mb-3 relative z-10">
+                <div>
+                    <p class="text-[10px] font-bold text-slate-400 uppercase">Звание</p>
+                    <p class="text-xl font-black text-slate-800" id="rank-title">Новичок</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-2xl font-black text-blue-600 leading-none" id="display-xp">0</p>
+                    <p class="text-[9px] font-bold text-slate-400 uppercase">XP</p>
+                </div>
+            </div>
+            <div class="progress-container">
+                <div id="xp-progress" class="progress-fill h-2 bg-gradient-to-r from-blue-400 to-blue-600" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <div id="workout-list" class="space-y-6"></div>
+    </div>
+
+    <div id="screen-stats" class="hidden px-6 pt-10 pb-24 anim-enter">
+        <h2 class="text-3xl font-black text-slate-800 mb-6">Прогресс</h2>
+
+        <div class="glass-panel p-5 mb-6">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 text-center" id="calendar-month">МЕСЯЦ</p>
+            <div class="grid grid-cols-7 gap-2" id="calendar-grid"></div>
+        </div>
+
+        <div class="glass-panel p-5 mb-6">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">История (Последние 5)</p>
+            <div id="history-log" class="space-y-3"></div>
+        </div>
+
+        <div class="glass-panel p-6 mb-8">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6 text-center">Зал Славы (12)</p>
+            <div class="grid grid-cols-4 gap-6 justify-items-center" id="trophy-list"></div>
+        </div>
+    </div>
+
+    <div id="screen-settings" class="hidden px-6 pt-10 pb-24 anim-enter">
+        <h2 class="text-3xl font-black text-slate-800 mb-8">Настройки</h2>
+
+        <div class="glass-panel p-6 mb-6">
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Твое тело</p>
+            <div class="flex justify-between items-center mb-4">
+                <div>
+                    <p class="text-sm font-bold text-slate-700">BMI (Индекс)</p>
+                    <p class="text-3xl font-black text-blue-600" id="bmi-val">--</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-xs font-bold text-slate-400 bg-slate-100 px-3 py-1 rounded-lg" id="bmi-desc">Нет данных</p>
+                </div>
+            </div>
+            <button onclick="openEditProfile()" class="w-full py-3 rounded-xl bg-blue-50 text-blue-600 font-bold text-xs uppercase hover:bg-blue-100 transition">Изменить данные</button>
+        </div>
+
+        <div class="glass-panel p-6 mb-6 space-y-6">
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-700">Звуковые эффекты</span>
+                <div onclick="toggleSetting('sound')" id="set-sound" class="toggle-switch active"></div>
+            </div>
+            <div class="flex justify-between items-center">
+                <span class="font-bold text-slate-700">Вибрация (Haptic)</span>
+                <div onclick="toggleSetting('haptic')" id="set-haptic" class="toggle-switch active"></div>
+            </div>
+        </div>
+
+        <div class="glass-panel p-6 mb-6">
+             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Данные</p>
+             <div class="flex gap-3">
+                 <button onclick="downloadData()" class="flex-1 py-3 bg-slate-800 text-white rounded-xl text-xs font-bold uppercase">Сохранить</button>
+                 <button onclick="triggerUpload()" class="flex-1 py-3 bg-white border border-slate-300 text-slate-600 rounded-xl text-xs font-bold uppercase">Загрузить</button>
+                 <input type="file" id="file-upload" class="hidden" onchange="uploadData(this)">
+             </div>
+        </div>
+
+        <button onclick="fullReset()" class="w-full py-4 border-2 border-red-100 text-red-400 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-50 transition">Сброс всего прогресса</button>
+        
+        <p class="text-center text-[9px] text-slate-300 mt-8 font-mono">BUILD v40.0 CLEAN</p>
+    </div>
+
+    <div id="timer-overlay" class="fixed bottom-28 left-4 right-4 glass-panel p-4 z-[200] hidden flex items-center justify-between border-2 border-white/50 shadow-2xl transition-all duration-500">
+        <div class="flex items-center gap-4">
+            <div class="w-14 h-14 bg-blue-50 rounded-2xl flex items-center justify-center border border-blue-100 timer-pulse">
+                <span class="text-2xl font-black text-blue-600" id="timer-count">90</span>
+            </div>
+            <div>
+                <p class="text-[9px] font-bold text-blue-400 uppercase tracking-widest">Отдых</p>
+                <p class="text-xs font-bold text-slate-600 w-40 leading-tight" id="timer-advice">Дыши глубже...</p>
+            </div>
+        </div>
+        <button onclick="skipTimer()" class="bg-white text-blue-600 px-6 py-3 rounded-xl font-black text-xs uppercase shadow-sm border border-slate-100 active:scale-95">Далее</button>
+    </div>
+
+    <div id="modal-victory" class="fixed inset-0 z-[300] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 hidden">
+        <div class="glass-panel p-10 text-center w-full max-w-sm border-2 border-white transform scale-100 transition-all">
+            <div class="text-8xl mb-6 animate-bounce">🏆</div>
+            <h2 class="text-3xl font-black text-slate-800 uppercase mb-2">ЛЕГЕНДА!</h2>
+            <p class="text-slate-500 font-bold text-sm mb-8">Тренировка завершена.<br>Мышцы растут, пока ты отдыхаешь.</p>
+            <button onclick="closeModal('modal-victory')" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase shadow-xl active:scale-95">Принять</button>
+        </div>
+    </div>
+
+    <div id="modal-trophy" class="fixed inset-0 z-[310] bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-6 hidden" onclick="if(event.target===this) closeModal('modal-trophy')">
+        <div class="glass-panel p-8 text-center w-full max-w-sm">
+            <div id="mt-icon" class="mb-6 scale-150 text-blue-500 flex justify-center"></div>
+            <h3 id="mt-title" class="text-2xl font-black text-slate-800 uppercase mb-2">Title</h3>
+            <div id="mt-status" class="inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase mb-6 bg-slate-100">Locked</div>
+            <p id="mt-desc" class="text-sm font-bold text-slate-500 mb-8 bg-white/50 p-4 rounded-xl">Desc</p>
+            <button onclick="closeModal('modal-trophy')" class="w-full py-3 bg-white border border-slate-200 rounded-xl font-black text-slate-500 uppercase active:scale-95">Понятно</button>
+        </div>
+    </div>
+
+    <div class="fixed bottom-6 left-6 right-6 glass-panel p-2 flex justify-between z-[100] shadow-2xl border-white/60">
+        <button onclick="showScreen('workout')" class="nav-btn flex-1 py-4 flex justify-center active" id="nav-workout">
+            <svg class="w-7 h-7 nav-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+        </button>
+        <button onclick="showScreen('stats')" class="nav-btn flex-1 py-4 flex justify-center" id="nav-stats">
+            <svg class="w-7 h-7 nav-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+        </button>
+        <button onclick="showScreen('settings')" class="nav-btn flex-1 py-4 flex justify-center" id="nav-settings">
+            <svg class="w-7 h-7 nav-icon" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+        </button>
+    </div>
+
+    <script>
+        // --- КОНСТАНТЫ ---
+        const APP_KEY = "v40_titan_";
+        let AUDIO_CTX = null; 
+
+        const QUOTES = ["Боль временна, триумф вечен.", "Не ной. Делай.", "Дисциплина — это свобода.", "Будь лучше, чем вчера.", "Действие побеждает страх.", "Просто начни.", "Характер куется в зале.", "Твое тело может всё.", "Сдаться — значит проиграть."];
+        
+        // База Трофеев (12 штук)
+        const TROPHIES = {
+            't1': { title: "Старт", desc: "Нажми первую кнопку.", icon: '<path d="M13 10V3L4 14h7v7l9-11h-7z"/>' },
+            't2': { title: "Силач", desc: "500 XP.", icon: '<path d="M4 6h16M4 12h16M4 18h16"/>' },
+            't3': { title: "Воля", desc: "Стрик 3 дня.", icon: '<path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>' },
+            't4': { title: "Атлет", desc: "5 Уровень.", icon: '<path d="M13 10V3L4 14h7v7l9-11h-7z"/>' },
+            't5': { title: "1K Club", desc: "1000 XP.", icon: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/>' },
+            't6': { title: "Неделя", desc: "Стрик 7 дней.", icon: '<path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>' },
+            't7': { title: "Жаворонок", desc: "Тренировка до 9 утра.", icon: '<path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>' },
+            't8': { title: "Мастер", desc: "10 Уровень.", icon: '<path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>' },
+            't9': { title: "Турникмен", desc: "Цель подтягиваний: 10.", icon: '<path d="M4 6h16M4 10h16M12 4v16"/>' },
+            't10': { title: "Сталь", desc: "3000 XP.", icon: '<path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>' },
+            't11': { title: "Фанатик", desc: "20 дней в месяц.", icon: '<path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>' },
+            't12': { title: "Мистер Олимпия", desc: "10 000 XP.", icon: '<path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16l2.286 6.857L21 12l-5.714 2.143L13 21l-2.286-6.857L5 12l5.714-2.143L13 3z"/>' }
+        };
+
+        // База упражнений
+        const BASE_EXERCISES = [
+            { id: 'push', name: 'Отжимания', cue: 'Локти под 45°', base: 10, xp: 25, color: 'blue' },
+            { id: 'pull', name: 'Подтягивания', cue: 'Тяни к груди', base: 3, xp: 50, color: 'purple' },
+            { id: 'squat', name: 'Приседания', cue: 'Спина ровно', base: 15, xp: 25, color: 'green' },
+            { id: 'abs',  name: 'Пресс', cue: 'Короткая амплитуда', base: 10, xp: 15, color: 'rose' }
+        ];
+
+        // Глобальное состояние
+        let S = { name:'', weight:0, height:0, xp:0, streak:0, lastDate:'', history:{}, goals:{}, settings:{sound:true, haptic:true} };
+        let warmupDone = false;
+        let timerInt;
+
+        // --- ИНИЦИАЛИЗАЦИЯ ---
+        function init() {
+            // Миграция старых данных
+            const v39 = localStorage.getItem("v39_titan_state");
+            const v38 = localStorage.getItem("v38_titan_state");
+            const current = localStorage.getItem(APP_KEY + 'state');
+
+            if(!current) {
+                if(v39) localStorage.setItem(APP_KEY + 'state', v39);
+                else if(v38) localStorage.setItem(APP_KEY + 'state', v38);
+            }
+
+            loadState();
+            if (!S.name) {
+                document.getElementById('screen-setup').classList.remove('hidden');
+                document.getElementById('close-setup-btn').classList.add('hidden');
+            } else {
+                checkStreak();
+                showScreen('workout');
+                updateData();
+            }
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem(APP_KEY + 'state');
+            if (saved) {
+                S = JSON.parse(saved);
+                if(!S.settings) S.settings = { sound: true, haptic: true };
+                if(!S.goals) S.goals = {};
+            }
+        }
+
+        function saveState() { localStorage.setItem(APP_KEY + 'state', JSON.stringify(S)); }
+
+        function resumeAudio() {
+            if (!AUDIO_CTX) AUDIO_CTX = new (window.AudioContext || window.webkitAudioContext)();
+            if (AUDIO_CTX.state === 'suspended') AUDIO_CTX.resume();
+        }
+
+        function playTone(type) {
+            if (!S.settings.sound || !AUDIO_CTX) return;
+            const osc = AUDIO_CTX.createOscillator();
+            const gain = AUDIO_CTX.createGain();
+            const now = AUDIO_CTX.currentTime;
+            osc.connect(gain); gain.connect(AUDIO_CTX.destination);
+            
+            if (type === 'click') {
+                osc.frequency.setValueAtTime(600, now);
+                gain.gain.setValueAtTime(0.1, now);
+                osc.start(now); osc.stop(now + 0.1);
+            } else if (type === 'timer_end') {
+                osc.frequency.setValueAtTime(800, now);
+                osc.frequency.exponentialRampToValueAtTime(400, now + 0.3);
+                gain.gain.setValueAtTime(0.2, now);
+                osc.start(now); osc.stop(now + 0.3);
+            } else if (type === 'win') {
+                [523, 659, 783, 1046].forEach((f, i) => {
+                    setTimeout(() => {
+                        const o = AUDIO_CTX.createOscillator(); const g = AUDIO_CTX.createGain();
+                        o.connect(g); g.connect(AUDIO_CTX.destination);
+                        o.frequency.value = f; g.gain.value = 0.1;
+                        o.start(); o.stop(AUDIO_CTX.currentTime + 0.2);
+                    }, i*150);
+                });
+            }
+        }
+
+        // --- ДЕЙСТВИЯ ---
+        function finishSetup() {
+            const n = document.getElementById('setup-name').value;
+            if(!n) return alert('Введите имя!');
+            resumeAudio(); 
+            S.name = n;
+            S.weight = document.getElementById('setup-weight').value || 0;
+            S.height = document.getElementById('setup-height').value || 0;
+            saveState();
+            document.getElementById('screen-setup').classList.add('hidden');
+            showScreen('workout');
+            updateData();
+        }
+        
+        function closeSetup() {
+             document.getElementById('screen-setup').classList.add('hidden');
+        }
+
+        function openEditProfile() {
+            document.getElementById('screen-setup').classList.remove('hidden');
+            document.getElementById('close-setup-btn').classList.remove('hidden');
+            document.getElementById('setup-name').value = S.name;
+            document.getElementById('setup-weight').value = S.weight;
+            document.getElementById('setup-height').value = S.height;
+        }
+
+        function toggleWarmup() {
+            resumeAudio();
+            warmupDone = !warmupDone;
+            const sw = document.getElementById('warmup-switch');
+            const txt = document.getElementById('warmup-text');
+            if (warmupDone) {
+                sw.classList.add('active'); txt.innerText = "АКТИВНО"; txt.style.color = "#3b82f6"; playTone('click');
+            } else {
+                sw.classList.remove('active'); txt.innerText = "НЕ ВЫПОЛНЕНО"; txt.style.color = "#94a3b8";
+            }
+        }
+
+        function adjustGoal(id, delta) {
+             const base = BASE_EXERCISES.find(e => e.id === id).base;
+             let current = getGoal(id, base);
+             let newVal = current + delta;
+             if (newVal < 1) newVal = 1;
+             
+             S.goals[id] = newVal;
+             saveState();
+             updateData();
+        }
+
+        function doSet(btn, id, set, val, color) {
+            if(!warmupDone) { alert("Сначала нажми «Разминка»!"); return; }
+            resumeAudio();
+            const key = `${todayKey()}_${id}_${set}`;
+            
+            if(S.history[key]) {
+                delete S.history[key]; S.xp -= val; if(S.xp<0)S.xp=0; btn.classList.remove('active-'+color);
+            } else {
+                S.history[key] = true; S.history[todayKey()] = true; 
+                S.xp += val; btn.classList.add('active-'+color);
+                
+                // Vibrate
+                if(S.settings.haptic && window.navigator.vibrate) window.navigator.vibrate(50);
+                playTone('click');
+                
+                if(!S.history['t1_unlocked']) S.history['t1_unlocked'] = true;
+                
+                // Increase goal ONLY on last set
+                if (set === 4) {
+                    const currentGoal = getGoal(id, BASE_EXERCISES.find(e=>e.id===id).base);
+                    S.goals[id] = currentGoal + 1;
+                }
+                
+                updateStreak(); startTimer();
+            }
+            saveState(); updateData(); checkVictory();
+        }
+
+        // --- ЛОГИКА ---
+        function checkStreak() {
+            const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
+            if (S.lastDate !== todayKey() && S.lastDate !== yesterday.toDateString() && S.lastDate) S.streak = 0;
+            saveState();
+        }
+        function updateStreak() { if (S.lastDate !== todayKey()) { S.streak++; S.lastDate = todayKey(); saveState(); } }
+        function todayKey() { return new Date().toDateString(); }
+        function getGoal(id, base) { return S.goals[id] || base; }
+
+        function checkVictory() {
+            let all = true;
+            BASE_EXERCISES.forEach(ex => { for(let i=1; i<=4; i++) if(!S.history[`${todayKey()}_${ex.id}_${i}`]) all=false; });
+            if (all && !S.history[todayKey()+'_win']) {
+                S.history[todayKey()+'_win'] = true; saveState();
+                document.getElementById('modal-victory').classList.remove('hidden');
+                try { confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } }); } catch(e){}
+                playTone('win');
+            }
+        }
+
+        // --- TIMER ---
+        function startTimer() {
+            clearInterval(timerInt); let t = 90;
+            const panel = document.getElementById('timer-overlay');
+            panel.classList.remove('hidden', 'translate-y-20', 'opacity-0');
+            timerInt = setInterval(() => {
+                t--; document.getElementById('timer-count').innerText = t;
+                if(t <= 0) {
+                     playTone('timer_end');
+                     if(S.settings.haptic && window.navigator.vibrate) window.navigator.vibrate([100, 50, 100]);
+                     skipTimer();
+                }
+            }, 1000);
+        }
+        function skipTimer() {
+            clearInterval(timerInt);
+            const panel = document.getElementById('timer-overlay');
+            panel.classList.add('translate-y-20', 'opacity-0');
+            setTimeout(() => panel.classList.add('hidden'), 500);
+        }
+
+        // --- UI UPDATES ---
+        function updateData() {
+            document.getElementById('display-name').innerText = `Привет, ${S.name}`;
+            document.getElementById('display-streak').innerText = S.streak;
+            document.getElementById('display-date').innerText = new Date().toLocaleDateString('ru-RU', {weekday:'long', day:'numeric', month:'long'}).toUpperCase();
+            document.getElementById('daily-quote').innerText = QUOTES[new Date().getDate() % QUOTES.length];
+
+            const lvl = Math.floor(S.xp/1000)+1;
+            document.getElementById('display-xp').innerText = S.xp % 1000;
+            document.getElementById('xp-progress').style.width = `${(S.xp%1000)/10}%`;
+            
+            const ranks = ["Новичок", "Любитель", "Атлет", "Профи", "Элита", "Мастер", "Легенда", "Титан", "Мистер Олимпия"];
+            document.getElementById('rank-title').innerText = ranks[Math.min(lvl-1, ranks.length-1)];
+
+            if(S.weight && S.height) {
+                const h = S.height/100; const bmi = (S.weight/(h*h)).toFixed(1);
+                document.getElementById('bmi-val').innerText = bmi;
+                document.getElementById('bmi-desc').innerText = bmi<18.5?"Дефицит":bmi>25?"Избыток":"Норма";
+            }
+
+            const list = document.getElementById('workout-list');
+            list.innerHTML = BASE_EXERCISES.map(ex => {
+                const goal = getGoal(ex.id, ex.base);
+                let btns = '';
+                for(let i=1; i<=4; i++) {
+                    const done = S.history[`${todayKey()}_${ex.id}_${i}`];
+                    btns += `<button onclick="doSet(this, '${ex.id}', ${i}, ${ex.xp}, '${ex.color}')" class="glass-btn h-16 ${done ? 'active-'+ex.color : ''}"><span class="text-[9px] uppercase opacity-50 mb-1">Сет ${i}</span><span class="text-2xl font-black">${goal}</span></button>`;
+                }
+                
+                // Smart Goal Controls
+                const ctrls = `
+                    <div class="flex gap-2">
+                         <div onclick="adjustGoal('${ex.id}', -1)" class="ctrl-btn">–</div>
+                         <div onclick="adjustGoal('${ex.id}', 1)" class="ctrl-btn">+</div>
+                    </div>
+                `;
+
+                return `<div class="glass-panel p-6">
+                            <div class="flex justify-between items-center mb-5">
+                                <div><h3 class="text-xl font-black text-slate-800">${ex.name}</h3><p class="text-[10px] text-slate-400 font-bold uppercase mt-1">${ex.cue}</p></div>
+                                <div class="flex flex-col items-end gap-2">
+                                    <div class="bg-white/50 px-3 py-1.5 rounded-xl border border-white text-center min-w-[60px]">
+                                        <span class="block text-[9px] font-black text-slate-400 uppercase">Цель</span>
+                                        <span class="text-lg font-black text-slate-800">${goal}</span>
+                                    </div>
+                                    ${ctrls}
+                                </div>
+                            </div>
+                            <div class="grid grid-cols-4 gap-3">${btns}</div>
+                        </div>`;
+            }).join('');
+
+            const tGrid = document.getElementById('trophy-list');
+            tGrid.innerHTML = Object.keys(TROPHIES).map(id => {
+                const u = checkTrophy(id);
+                return `<div onclick="openTrophy('${id}', ${u})" class="badge ${u?'unlocked':''}"><svg class="w-12 h-12" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${TROPHIES[id].icon}</svg></div>`;
+            }).join('');
+
+            const cGrid = document.getElementById('calendar-grid');
+            cGrid.innerHTML = '';
+            const today = new Date();
+            const days = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
+            document.getElementById('calendar-month').innerText = today.toLocaleDateString('ru-RU',{month:'long'}).toUpperCase();
+            for(let i=1; i<=days; i++) {
+                const dKey = new Date(today.getFullYear(), today.getMonth(), i).toDateString();
+                const active = S.history[dKey];
+                const isToday = i === today.getDate();
+                cGrid.innerHTML += `<div class="cal-day ${active?'active':''} ${isToday ? 'border-blue-400 border-2' : ''}">${i}</div>`;
+            }
+
+            document.getElementById('set-sound').className = `toggle-switch ${S.settings.sound?'active':''}`;
+            document.getElementById('set-haptic').className = `toggle-switch ${S.settings.haptic?'active':''}`;
+            
+            // History Log Render
+            const logContainer = document.getElementById('history-log');
+            const dates = Object.keys(S.history).filter(k => k.includes(new Date().getFullYear()) && !k.includes('_')).sort((a,b)=>new Date(b)-new Date(a)).slice(0,5);
+            logContainer.innerHTML = dates.length ? dates.map(d => `<div class="flex justify-between items-center text-xs font-bold text-slate-600 bg-white/40 p-3 rounded-xl mb-2"><span>${new Date(d).toLocaleDateString('ru-RU')}</span><span class="text-green-500">Выполнено</span></div>`).join('') : '<p class="text-xs text-center text-slate-400">Пусто</p>';
+        }
+
+        function checkTrophy(id) {
+            if(id === 't1') return S.history['t1_unlocked'];
+            if(id === 't2') return S.xp >= 500;
+            if(id === 't3') return S.streak >= 3;
+            if(id === 't4') return Math.floor(S.xp/1000)+1 >= 5;
+            if(id === 't5') return S.xp >= 1000;
+            if(id === 't6') return S.streak >= 7;
+            if(id === 't8') return Math.floor(S.xp/1000)+1 >= 10;
+            if(id === 't9') return getGoal('pull', 3) >= 10;
+            if(id === 't10') return S.xp >= 3000;
+            if(id === 't12') return S.xp >= 10000;
+            return false;
+        }
+
+        function showScreen(id) {
+            ['workout','stats','settings'].forEach(s => {
+                document.getElementById('screen-'+s).classList.add('hidden');
+                document.getElementById('nav-'+s).classList.remove('active');
+                document.getElementById('nav-'+s).querySelector('svg').classList.replace('text-blue-600','text-slate-400');
+            });
+            document.getElementById('screen-'+id).classList.remove('hidden');
+            const btn = document.getElementById('nav-'+id);
+            btn.classList.add('active');
+            btn.querySelector('svg').classList.replace('text-slate-400','text-blue-600');
+        }
+
+        // --- DATA MANAGEMENT ---
+        function downloadData() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(S));
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", "bless_morning_backup.json");
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+        }
+
+        function triggerUpload() { document.getElementById('file-upload').click(); }
+
+        function uploadData(input) {
+            const file = input.files[0];
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const json = JSON.parse(e.target.result);
+                    if(json.name && json.history) {
+                        S = json; saveState(); location.reload();
+                    } else { alert("Неверный формат файла"); }
+                } catch(e) { alert("Ошибка чтения файла"); }
+            };
+            reader.readAsText(file);
+        }
+
+        function openTrophy(id, u) {
+            const t = TROPHIES[id];
+            document.getElementById('mt-title').innerText = t.title; document.getElementById('mt-desc').innerText = t.desc;
+            document.getElementById('mt-icon').innerHTML = `<svg class="w-20 h-20 ${u?'text-blue-600':'text-slate-300'}" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">${t.icon}</svg>`;
+            const st = document.getElementById('mt-status'); st.innerText = u?"ПОЛУЧЕНО":"ЗАКРЫТО";
+            st.className = `inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase mb-6 ${u?'bg-blue-100 text-blue-600':'bg-slate-100 text-slate-400'}`;
+            showModal('modal-trophy');
+        }
+        function showModal(id) { document.getElementById(id).classList.remove('hidden'); }
+        function closeModal(id) { document.getElementById(id).classList.add('hidden'); }
+        function toggleSetting(k) { S.settings[k] = !S.settings[k]; saveState(); updateData(); }
+        function fullReset() { if(confirm("Сбросить ВЕСЬ прогресс?")) { localStorage.removeItem(APP_KEY+'state'); location.reload(); } }
+
+        init();
+    </script>
+</body>
+</html>
