@@ -2,14 +2,26 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Bless Morning: TITAN v44</title>
+    
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="bg-[#f1f5f9] antialiased select-none">
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.ready(); // Сообщаем Telegram, что приложение загрузилось
+        tg.expand(); // Разворачиваем на весь экран
+        
+        // Настройка цветов под тему пользователя
+        document.documentElement.style.setProperty('--tg-theme-bg-color', tg.backgroundColor);
+    </script>
 
     <div id="screen-setup" class="fixed inset-0 z-[2000] bg-[#f1f5f9] flex items-center justify-center p-6 hidden">
         <div class="glass-panel p-10 w-full max-w-sm text-center relative">
@@ -27,7 +39,7 @@
         </div>
     </div>
 
-    <div id="screen-workout" class="px-6 pt-10 pb-24 hidden">
+    <div id="screen-workout" class="px-6 pt-10 pb-32 hidden">
         <header class="flex justify-between items-end mb-8">
             <div>
                 <p class="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-1" id="display-date">...</p>
@@ -68,7 +80,7 @@
         <div id="workout-list" class="space-y-6"></div>
     </div>
 
-    <div id="screen-stats" class="hidden px-6 pt-10 pb-24">
+    <div id="screen-stats" class="hidden px-6 pt-10 pb-32">
         <h2 class="text-3xl font-black text-slate-800 mb-6">Прогресс</h2>
         <div class="glass-panel p-5 mb-6 text-center">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4" id="calendar-month">МЕСЯЦ</p>
@@ -79,12 +91,12 @@
             <div id="history-log" class="space-y-3"></div>
         </div>
         <div class="glass-panel p-6 mb-8 text-center">
-            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Зал Славы (Нажми иконку)</p>
+            <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-6">Зал Славы</p>
             <div class="grid grid-cols-4 gap-6 justify-items-center" id="trophy-list"></div>
         </div>
     </div>
 
-    <div id="screen-settings" class="hidden px-6 pt-10 pb-24">
+    <div id="screen-settings" class="hidden px-6 pt-10 pb-32">
         <h2 class="text-3xl font-black text-slate-800 mb-8">Настройки</h2>
         <div class="glass-panel p-6 mb-6">
             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Твое тело</p>
@@ -99,6 +111,7 @@
             </div>
             <button onclick="UI.openEditProfile()" class="w-full py-3 rounded-xl bg-blue-50 text-blue-600 font-bold text-xs uppercase hover:bg-blue-100 transition">Изменить данные</button>
         </div>
+        
         <div class="glass-panel p-6 mb-6 space-y-6">
             <div class="flex justify-between items-center">
                 <span class="font-bold text-slate-700">Звуковые эффекты</span>
@@ -109,15 +122,8 @@
                 <div onclick="App.toggleSetting('haptic')" id="set-haptic" class="toggle-switch active"></div>
             </div>
         </div>
-        <div class="glass-panel p-6 mb-6">
-             <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Данные</p>
-             <div class="flex gap-3">
-                 <button onclick="Data.download()" class="flex-1 py-3 bg-slate-800 text-white rounded-xl text-xs font-bold uppercase">Сохранить</button>
-                 <button onclick="Data.triggerUpload()" class="flex-1 py-3 bg-white border border-slate-300 text-slate-600 rounded-xl text-xs font-bold uppercase">Загрузить</button>
-                 <input type="file" id="file-upload" class="hidden" onchange="Data.upload(this)">
-             </div>
-        </div>
-        <button onclick="App.fullReset()" class="w-full py-4 border-2 border-red-100 text-red-400 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-red-50 transition">Сброс всего прогресса</button>
+
+        <button onclick="App.fullReset()" class="w-full py-4 border-2 border-red-100 text-red-400 rounded-2xl font-black uppercase text-xs tracking-widest">Сброс всего прогресса</button>
     </div>
 
     <div id="timer-overlay" class="fixed bottom-28 left-4 right-4 glass-panel p-4 z-[200] hidden flex items-center justify-between border-2 border-white/50 shadow-2xl transition-all duration-500">
@@ -138,15 +144,6 @@
             <div class="text-8xl mb-6 animate-bounce">🏆</div>
             <h2 class="text-3xl font-black text-slate-800 uppercase mb-2">ЛЕГЕНДА!</h2>
             <button onclick="UI.closeModal('modal-victory')" class="w-full py-4 bg-blue-600 text-white rounded-2xl font-black uppercase">Принять</button>
-        </div>
-    </div>
-    <div id="modal-trophy" class="fixed inset-0 z-[310] bg-slate-900/50 backdrop-blur-md flex items-center justify-center p-6 hidden" onclick="if(event.target===this) UI.closeModal('modal-trophy')">
-        <div class="glass-panel p-8 text-center w-full max-w-sm">
-            <div id="mt-icon" class="mb-6 scale-150 text-blue-500 flex justify-center"></div>
-            <h3 id="mt-title" class="text-2xl font-black text-slate-800 uppercase mb-2">Title</h3>
-            <div id="mt-status" class="inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase mb-6 bg-slate-100">Locked</div>
-            <p id="mt-desc" class="text-sm font-bold text-slate-500 mb-8 bg-white/50 p-4 rounded-xl">Desc</p>
-            <button onclick="UI.closeModal('modal-trophy')" class="w-full py-3 bg-white border border-slate-200 rounded-xl font-black text-slate-500 uppercase">Понятно</button>
         </div>
     </div>
 
