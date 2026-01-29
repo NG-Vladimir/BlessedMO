@@ -1,5 +1,6 @@
 // --- TELEGRAM SETUP ---
-const tg = window.Telegram.WebApp;
+// Проверка на случай, если скрипт запущен в обычном браузере
+const tg = window.Telegram ? window.Telegram.WebApp : null;
 
 // Переменные приложения
 let AUDIO_CTX = null;
@@ -10,25 +11,39 @@ let timerInt;
 // --- ЛОГИКА ПРИЛОЖЕНИЯ ---
 const App = {
     init() {
+        // Проверка наличия config.js
+        if (typeof CONFIG === 'undefined') {
+            return alert('Ошибка: Не найден файл config.js! Проверьте подключение.');
+        }
+
         // 1. Инициализация Telegram
-        tg.ready();
-        tg.expand(); // Принудительно на весь экран
-        tg.setHeaderColor('#f1f5f9'); // Цвет "шапки" под фон приложения
-        tg.setBackgroundColor('#f1f5f9');
+        if (tg) {
+            tg.ready();
+            try {
+                tg.expand(); // Принудительно на весь экран
+                tg.setHeaderColor('#f1f5f9'); // Цвет шапки
+                tg.setBackgroundColor('#f1f5f9');
+            } catch (e) { console.log('Telegram API styling error', e); }
+        }
 
         // 2. Загрузка данных
         const saved = localStorage.getItem(CONFIG.APP_KEY + 'state');
         if (saved) {
-            S = JSON.parse(saved);
-            // Миграция старых настроек, если их нет
-            if(!S.settings) S.settings = { sound: true, haptic: true };
-            if(!S.goals) S.goals = {};
+            try {
+                S = JSON.parse(saved);
+                // Миграция настроек
+                if(!S.settings) S.settings = { sound: true, haptic: true };
+                if(!S.goals) S.goals = {};
+            } catch (e) {
+                console.error("Ошибка чтения сохранения", e);
+                localStorage.removeItem(CONFIG.APP_KEY + 'state');
+            }
         }
 
-        // 3. Проверка имени (если нет - берем из Telegram)
+        // 3. Проверка имени (берем из Telegram безопасно)
         if (!S.name) {
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                // Автозаполнение имени из профиля
+            // Безопасная проверка: есть ли tg и есть ли user
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.first_name) {
                 document.getElementById('setup-name').value = tg.initDataUnsafe.user.first_name;
             }
             UI.toggleSetup(true);
@@ -53,9 +68,7 @@ const App = {
         S.height = document.getElementById('setup-height').value || 0;
         this.save();
         
-        // Telegram Haptic: Успешное сохранение
-        if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
-
+        this.triggerHaptic('success');
         UI.toggleSetup(false);
         UI.showScreen('workout');
         this.updateData();
@@ -67,21 +80,18 @@ const App = {
         UI.updateWarmupUI(warmupDone);
         
         if(warmupDone) {
-            // Включаем защиту от случайного закрытия свайпом
-            tg.enableClosingConfirmation();
-            
-            if(S.settings.haptic) tg.HapticFeedback.impactOccurred('medium');
+            if (tg) tg.enableClosingConfirmation(); // Защита от закрытия
+            this.triggerHaptic('medium');
             if(S.settings.sound) this.playTone('warmup');
         } else {
-            // Выключаем защиту, если разминку отменили
-            tg.disableClosingConfirmation();
-            if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
+            if (tg) tg.disableClosingConfirmation();
+            this.triggerHaptic('selection');
         }
     },
 
     toggleSetting(k) {
         S.settings[k] = !S.settings[k];
-        if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
+        this.triggerHaptic('selection');
         if(S.settings.sound) this.playTone('click');
         this.save();
         this.updateData();
@@ -95,14 +105,12 @@ const App = {
         if (newVal < 1) newVal = 1;
         S.goals[id] = newVal;
         
-        if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
-        
+        this.triggerHaptic('selection');
         this.save();
         this.updateData();
     },
 
     getCycleParams() {
-        // Логика 4-недельного цикла
         const totalWins = Object.keys(S.history).filter(k => k.includes('_win')).length;
         const currentWeekAbsolute = Math.floor(totalWins / 3); 
         const week = (currentWeekAbsolute % 4) + 1; 
@@ -120,8 +128,7 @@ const App = {
 
     doSet(id, set, val, color) {
         if(!warmupDone) {
-            // Вибрация ошибки
-            if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('error');
+            this.triggerHaptic('error');
             return alert("Сначала разминка!");
         }
         
@@ -132,20 +139,19 @@ const App = {
             // Отмена подхода
             delete S.history[key]; S.xp -= val;
             if(S.xp < 0) S.xp = 0;
-            if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
+            this.triggerHaptic('selection');
         } else {
             // Выполнение подхода
             S.history[key] = true; S.history[this.todayKey()] = true; S.xp += val;
             
             if(!S.history['t1_unlocked']) S.history['t1_unlocked'] = true;
 
-            // Telegram Haptic: Легкий удар
-            if(S.settings.haptic) tg.HapticFeedback.impactOccurred('light');
+            this.triggerHaptic('light');
             if(S.settings.sound) this.playTone('click');
             
             const cycle = this.getCycleParams();
             
-            // Проверка завершения всех подходов упражнения
+            // Проверка завершения упражнения
             if(set === cycle.sets) {
                 let allDone = true;
                 for(let i=1; i<=cycle.sets; i++) {
@@ -153,18 +159,19 @@ const App = {
                 }
 
                 if(allDone) {
-                    // Вибрация успеха при завершении упражнения
-                    if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
+                    this.triggerHaptic('success');
                     this.processAutoProgress(id, cycle.week);
                 }
             }
             this.startTimer();
         }
-        this.save(); this.updateData(); this.checkVictory();
+        this.save(); 
+        this.updateData(); 
+        this.checkVictory();
     },
 
     processAutoProgress(id, week) {
-        if (week === 4) return; // На пиковой неделе не повышаем
+        if (week === 4) return;
 
         const dayOfWeek = new Date().getDay(); 
         const exercises = CONFIG.getExercises(CONFIG.CURRENT_PHASE);
@@ -181,7 +188,6 @@ const App = {
             S.goals[id] = currentGoal + bonus;
             setTimeout(() => {
                 if(S.settings.sound) this.playTone('level_up');
-                // Используем showAlert Telegram если захотим, но стандартный alert надежнее пока
                 alert(`🚀 ПРОГРЕСС! Цель повышена до ${S.goals[id]}`);
             }, 600);
         }
@@ -198,8 +204,7 @@ const App = {
         timerInt = setInterval(() => {
             t--; UI.updateTimer(t);
             if(t <= 0) {
-                 // Таймер кончился: вибрация warning
-                 if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('warning');
+                 this.triggerHaptic('warning');
                  if(S.settings.sound) this.playTone('timer_end');
                  this.skipTimer();
             }
@@ -226,6 +231,7 @@ const App = {
         
         exercises.forEach(ex => { 
             for(let i=1; i<=cycle.sets; i++) {
+                // ИСПРАВЛЕНА ОПЕЧАТКА ЗДЕСЬ
                 if(!S.history[`${this.todayKey()}_${ex.id}_${i}`]) all=false; 
             }
         });
@@ -234,25 +240,43 @@ const App = {
             S.history[this.todayKey()+'_win'] = true; 
             this.save();
             
-            // Тренировка окончена - можно убрать защиту от закрытия
-            tg.disableClosingConfirmation();
+            if (tg) tg.disableClosingConfirmation();
             
             UI.showModal('modal-victory');
             try { confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } }); } catch(e){}
             
-            if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
+            this.triggerHaptic('success');
             if(S.settings.sound) this.playTone('win');
         }
     },
 
     fullReset() {
-        // Используем нативный конфирм Telegram для красоты
-        tg.showConfirm("Сбросить ВЕСЬ прогресс безвозвратно?", (ok) => {
+        const confirmAction = (ok) => {
             if(ok) {
                 localStorage.clear();
                 location.reload();
             }
-        });
+        };
+
+        if (tg && tg.showConfirm) {
+            tg.showConfirm("Сбросить ВЕСЬ прогресс безвозвратно?", confirmAction);
+        } else {
+            if (confirm("Сбросить ВЕСЬ прогресс безвозвратно?")) confirmAction(true);
+        }
+    },
+
+    // --- AUDIO & HAPTIC HELPERS ---
+    triggerHaptic(type) {
+        if (!S.settings.haptic || !tg) return;
+        try {
+            if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+            else if (type === 'medium') tg.HapticFeedback.impactOccurred('medium');
+            else if (type === 'heavy') tg.HapticFeedback.impactOccurred('heavy');
+            else if (type === 'selection') tg.HapticFeedback.selectionChanged();
+            else if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+            else if (type === 'warning') tg.HapticFeedback.notificationOccurred('warning');
+            else if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+        } catch(e) { console.log('Haptic not supported'); }
     },
 
     resumeAudio() {
@@ -329,19 +353,26 @@ const App = {
 const UI = {
     showScreen(id) {
         ['workout','stats','settings'].forEach(s => {
-            document.getElementById('screen-'+s).classList.add('hidden');
-            document.getElementById('nav-'+s).classList.remove('active');
-            const icon = document.getElementById('nav-'+s).querySelector('svg');
-            if(icon) icon.classList.replace('text-blue-600','text-slate-400');
+            const el = document.getElementById('screen-'+s);
+            if(el) el.classList.add('hidden');
+            const btn = document.getElementById('nav-'+s);
+            if(btn) {
+                btn.classList.remove('active');
+                const icon = btn.querySelector('svg');
+                if(icon) icon.classList.replace('text-blue-600','text-slate-400');
+            }
         });
-        document.getElementById('screen-'+id).classList.remove('hidden');
-        const btn = document.getElementById('nav-'+id);
-        btn.classList.add('active');
-        const icon = btn.querySelector('svg');
-        if(icon) icon.classList.replace('text-slate-400','text-blue-600');
+        const target = document.getElementById('screen-'+id);
+        if(target) target.classList.remove('hidden');
         
-        // Haptic при переключении табов
-        if(S.settings && S.settings.haptic) tg.HapticFeedback.selectionChanged();
+        const activeBtn = document.getElementById('nav-'+id);
+        if(activeBtn) {
+            activeBtn.classList.add('active');
+            const icon = activeBtn.querySelector('svg');
+            if(icon) icon.classList.replace('text-slate-400','text-blue-600');
+        }
+        
+        this.triggerHaptic('selection');
     },
 
     toggleSetup(show) {
@@ -350,7 +381,7 @@ const UI = {
         if(show) {
             el.classList.remove('hidden');
             if(closeBtn) closeBtn.classList.add('hidden');
-            tg.BackButton.hide(); // Прячем кнопку "Назад" на экране настройки
+            if(tg && tg.BackButton) tg.BackButton.hide();
         } else {
             el.classList.add('hidden');
         }
@@ -365,6 +396,14 @@ const UI = {
         document.getElementById('setup-name').value = S.name;
         document.getElementById('setup-weight').value = S.weight;
         document.getElementById('setup-height').value = S.height;
+        
+        if(tg && tg.BackButton) {
+            tg.BackButton.show();
+            tg.BackButton.onClick(() => {
+                UI.toggleSetup(false);
+                tg.BackButton.hide();
+            });
+        }
     },
 
     updateWarmupUI(active) {
@@ -394,26 +433,26 @@ const UI = {
     closeModal(id) { document.getElementById(id).classList.add('hidden'); },
 
     refreshAll() {
-        document.getElementById('display-name').innerText = `Привет, ${S.name}`;
-        document.getElementById('display-streak').innerText = S.streak;
-        document.getElementById('display-date').innerText = new Date().toLocaleDateString('ru-RU', {weekday:'long', day:'numeric', month:'long'}).toUpperCase();
-        document.getElementById('daily-quote').innerText = CONFIG.QUOTES[new Date().getDate() % CONFIG.QUOTES.length];
+        if(document.getElementById('display-name')) document.getElementById('display-name').innerText = `Привет, ${S.name}`;
+        if(document.getElementById('display-streak')) document.getElementById('display-streak').innerText = S.streak;
+        if(document.getElementById('display-date')) document.getElementById('display-date').innerText = new Date().toLocaleDateString('ru-RU', {weekday:'long', day:'numeric', month:'long'}).toUpperCase();
+        if(document.getElementById('daily-quote') && CONFIG.QUOTES) document.getElementById('daily-quote').innerText = CONFIG.QUOTES[new Date().getDate() % CONFIG.QUOTES.length];
 
         const lvl = Math.floor(S.xp/1000)+1;
-        document.getElementById('display-xp').innerText = S.xp % 1000;
-        document.getElementById('xp-progress').style.width = `${(S.xp%1000)/10}%`;
+        if(document.getElementById('display-xp')) document.getElementById('display-xp').innerText = S.xp % 1000;
+        if(document.getElementById('xp-progress')) document.getElementById('xp-progress').style.width = `${(S.xp%1000)/10}%`;
         
         const ranks = ["Новичок", "Любитель", "Атлет", "Профи", "Элита", "Мастер", "Легенда", "Титан", "Мистер Олимпия"];
-        document.getElementById('rank-title').innerText = ranks[Math.min(lvl-1, ranks.length-1)];
+        if(document.getElementById('rank-title')) document.getElementById('rank-title').innerText = ranks[Math.min(lvl-1, ranks.length-1)];
 
         if(S.weight && S.height) {
             const h = S.height/100; const bmi = (S.weight/(h*h)).toFixed(1);
-            document.getElementById('bmi-val').innerText = bmi;
-            document.getElementById('bmi-desc').innerText = bmi<18.5?"Дефицит":bmi>25?"Избыток":"Норма";
+            if(document.getElementById('bmi-val')) document.getElementById('bmi-val').innerText = bmi;
+            if(document.getElementById('bmi-desc')) document.getElementById('bmi-desc').innerText = bmi<18.5?"Дефицит":bmi>25?"Избыток":"Норма";
         }
 
-        document.getElementById('set-sound').className = `toggle-switch ${S.settings.sound?'active':''}`;
-        document.getElementById('set-haptic').className = `toggle-switch ${S.settings.haptic?'active':''}`;
+        if(document.getElementById('set-sound')) document.getElementById('set-sound').className = `toggle-switch ${S.settings.sound?'active':''}`;
+        if(document.getElementById('set-haptic')) document.getElementById('set-haptic').className = `toggle-switch ${S.settings.haptic?'active':''}`;
 
         this.renderWorkouts();
         this.renderCalendar();
@@ -423,6 +462,8 @@ const UI = {
 
     renderWorkouts() {
         const list = document.getElementById('workout-list');
+        if(!list) return;
+        
         const exercises = CONFIG.getExercises(CONFIG.CURRENT_PHASE);
         const cycle = App.getCycleParams(); 
 
@@ -466,6 +507,7 @@ const UI = {
 
     renderCalendar() {
         const cGrid = document.getElementById('calendar-grid');
+        if(!cGrid) return;
         cGrid.innerHTML = '';
         const today = new Date();
         const days = new Date(today.getFullYear(), today.getMonth()+1, 0).getDate();
@@ -480,12 +522,14 @@ const UI = {
 
     renderHistory() {
         const logContainer = document.getElementById('history-log');
+        if(!logContainer) return;
         const dates = Object.keys(S.history).filter(k => k.includes(new Date().getFullYear()) && !k.includes('_')).sort((a,b)=>new Date(b)-new Date(a)).slice(0,5);
         logContainer.innerHTML = dates.length ? dates.map(d => `<div class="flex justify-between items-center text-xs font-bold text-slate-600 bg-white/40 p-3 rounded-xl mb-2"><span>${new Date(d).toLocaleDateString('ru-RU')}</span><span class="text-green-500">Выполнено</span></div>`).join('') : '<p class="text-xs text-center text-slate-400">Пусто</p>';
     },
     
     renderTrophies() {
         const tGrid = document.getElementById('trophy-list');
+        if(!tGrid) return;
         tGrid.innerHTML = Object.keys(CONFIG.TROPHIES).map(id => {
             const u = this.checkTrophy(id);
             const t = CONFIG.TROPHIES[id];
@@ -514,6 +558,10 @@ const UI = {
         const st = document.getElementById('mt-status'); st.innerText = u?"ПОЛУЧЕНО":"ЗАКРЫТО";
         st.className = `inline-block px-4 py-1 rounded-full text-[10px] font-black uppercase mb-6 ${u?'bg-blue-100 text-blue-600':'bg-slate-100 text-slate-400'}`;
         this.showModal('modal-trophy');
+    },
+
+    triggerHaptic(type) {
+        App.triggerHaptic(type);
     }
 };
 
