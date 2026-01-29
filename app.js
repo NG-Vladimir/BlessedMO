@@ -1,3 +1,7 @@
+// --- TELEGRAM SETUP ---
+const tg = window.Telegram.WebApp;
+
+// Переменные приложения
 let AUDIO_CTX = null;
 let S = { name:'', weight:0, height:0, xp:0, streak:0, lastDate:'', history:{}, goals:{}, settings:{sound:true, haptic:true} };
 let warmupDone = false;
@@ -6,31 +10,52 @@ let timerInt;
 // --- ЛОГИКА ПРИЛОЖЕНИЯ ---
 const App = {
     init() {
+        // 1. Инициализация Telegram
+        tg.ready();
+        tg.expand(); // Принудительно на весь экран
+        tg.setHeaderColor('#f1f5f9'); // Цвет "шапки" под фон приложения
+        tg.setBackgroundColor('#f1f5f9');
+
+        // 2. Загрузка данных
         const saved = localStorage.getItem(CONFIG.APP_KEY + 'state');
         if (saved) {
             S = JSON.parse(saved);
+            // Миграция старых настроек, если их нет
             if(!S.settings) S.settings = { sound: true, haptic: true };
             if(!S.goals) S.goals = {};
         }
 
-        if (!S.name) UI.toggleSetup(true);
-        else {
+        // 3. Проверка имени (если нет - берем из Telegram)
+        if (!S.name) {
+            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                // Автозаполнение имени из профиля
+                document.getElementById('setup-name').value = tg.initDataUnsafe.user.first_name;
+            }
+            UI.toggleSetup(true);
+        } else {
             this.checkStreak();
             UI.showScreen('workout');
             this.updateData();
         }
     },
 
-    save() { localStorage.setItem(CONFIG.APP_KEY + 'state', JSON.stringify(S)); },
+    save() { 
+        localStorage.setItem(CONFIG.APP_KEY + 'state', JSON.stringify(S)); 
+    },
 
     finishSetup() {
         const n = document.getElementById('setup-name').value;
         if(!n) return alert('Введите имя!');
+        
         this.resumeAudio();
         S.name = n;
         S.weight = document.getElementById('setup-weight').value || 0;
         S.height = document.getElementById('setup-height').value || 0;
         this.save();
+        
+        // Telegram Haptic: Успешное сохранение
+        if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
+
         UI.toggleSetup(false);
         UI.showScreen('workout');
         this.updateData();
@@ -40,11 +65,23 @@ const App = {
         this.resumeAudio();
         warmupDone = !warmupDone;
         UI.updateWarmupUI(warmupDone);
-        if(warmupDone && S.settings.sound) this.playTone('warmup');
+        
+        if(warmupDone) {
+            // Включаем защиту от случайного закрытия свайпом
+            tg.enableClosingConfirmation();
+            
+            if(S.settings.haptic) tg.HapticFeedback.impactOccurred('medium');
+            if(S.settings.sound) this.playTone('warmup');
+        } else {
+            // Выключаем защиту, если разминку отменили
+            tg.disableClosingConfirmation();
+            if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
+        }
     },
 
     toggleSetting(k) {
         S.settings[k] = !S.settings[k];
+        if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
         if(S.settings.sound) this.playTone('click');
         this.save();
         this.updateData();
@@ -57,12 +94,15 @@ const App = {
         let newVal = current + delta;
         if (newVal < 1) newVal = 1;
         S.goals[id] = newVal;
+        
+        if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
+        
         this.save();
         this.updateData();
     },
 
     getCycleParams() {
-        // Логика 4 подходов
+        // Логика 4-недельного цикла
         const totalWins = Object.keys(S.history).filter(k => k.includes('_win')).length;
         const currentWeekAbsolute = Math.floor(totalWins / 3); 
         const week = (currentWeekAbsolute % 4) + 1; 
@@ -79,24 +119,33 @@ const App = {
     },
 
     doSet(id, set, val, color) {
-        if(!warmupDone) return alert("Сначала разминка!");
+        if(!warmupDone) {
+            // Вибрация ошибки
+            if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('error');
+            return alert("Сначала разминка!");
+        }
+        
         this.resumeAudio();
         const key = `${this.todayKey()}_${id}_${set}`;
         
         if(S.history[key]) {
+            // Отмена подхода
             delete S.history[key]; S.xp -= val;
             if(S.xp < 0) S.xp = 0;
+            if(S.settings.haptic) tg.HapticFeedback.selectionChanged();
         } else {
+            // Выполнение подхода
             S.history[key] = true; S.history[this.todayKey()] = true; S.xp += val;
             
-            // Если это первый клик вообще - даем достижение T1
             if(!S.history['t1_unlocked']) S.history['t1_unlocked'] = true;
 
-            if(S.settings.haptic && window.navigator.vibrate) window.navigator.vibrate(50);
+            // Telegram Haptic: Легкий удар
+            if(S.settings.haptic) tg.HapticFeedback.impactOccurred('light');
             if(S.settings.sound) this.playTone('click');
             
             const cycle = this.getCycleParams();
             
+            // Проверка завершения всех подходов упражнения
             if(set === cycle.sets) {
                 let allDone = true;
                 for(let i=1; i<=cycle.sets; i++) {
@@ -104,6 +153,8 @@ const App = {
                 }
 
                 if(allDone) {
+                    // Вибрация успеха при завершении упражнения
+                    if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
                     this.processAutoProgress(id, cycle.week);
                 }
             }
@@ -113,7 +164,7 @@ const App = {
     },
 
     processAutoProgress(id, week) {
-        if (week === 4) return; 
+        if (week === 4) return; // На пиковой неделе не повышаем
 
         const dayOfWeek = new Date().getDay(); 
         const exercises = CONFIG.getExercises(CONFIG.CURRENT_PHASE);
@@ -130,6 +181,7 @@ const App = {
             S.goals[id] = currentGoal + bonus;
             setTimeout(() => {
                 if(S.settings.sound) this.playTone('level_up');
+                // Используем showAlert Telegram если захотим, но стандартный alert надежнее пока
                 alert(`🚀 ПРОГРЕСС! Цель повышена до ${S.goals[id]}`);
             }, 600);
         }
@@ -146,13 +198,18 @@ const App = {
         timerInt = setInterval(() => {
             t--; UI.updateTimer(t);
             if(t <= 0) {
+                 // Таймер кончился: вибрация warning
+                 if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('warning');
                  if(S.settings.sound) this.playTone('timer_end');
                  this.skipTimer();
             }
         }, 1000);
     },
 
-    skipTimer() { clearInterval(timerInt); UI.toggleTimer(false); },
+    skipTimer() { 
+        clearInterval(timerInt); 
+        UI.toggleTimer(false); 
+    },
 
     updateData() { UI.refreshAll(); },
 
@@ -174,18 +231,28 @@ const App = {
         });
 
         if (all && !S.history[this.todayKey()+'_win']) {
-            S.history[this.todayKey()+'_win'] = true; this.save();
+            S.history[this.todayKey()+'_win'] = true; 
+            this.save();
+            
+            // Тренировка окончена - можно убрать защиту от закрытия
+            tg.disableClosingConfirmation();
+            
             UI.showModal('modal-victory');
             try { confetti({ particleCount: 300, spread: 100, origin: { y: 0.6 } }); } catch(e){}
+            
+            if(S.settings.haptic) tg.HapticFeedback.notificationOccurred('success');
             if(S.settings.sound) this.playTone('win');
         }
     },
 
     fullReset() {
-        if(confirm("Сбросить ВЕСЬ прогресс?")) { 
-            localStorage.clear();
-            location.reload(); 
-        }
+        // Используем нативный конфирм Telegram для красоты
+        tg.showConfirm("Сбросить ВЕСЬ прогресс безвозвратно?", (ok) => {
+            if(ok) {
+                localStorage.clear();
+                location.reload();
+            }
+        });
     },
 
     resumeAudio() {
@@ -217,6 +284,7 @@ const App = {
             gain.gain.setValueAtTime(0.1, now);
             osc.start(now);
             osc.stop(now + 0.1);
+            
             const osc2 = AUDIO_CTX.createOscillator();
             const gain2 = AUDIO_CTX.createGain();
             osc2.connect(gain2); gain2.connect(AUDIO_CTX.destination);
@@ -271,6 +339,9 @@ const UI = {
         btn.classList.add('active');
         const icon = btn.querySelector('svg');
         if(icon) icon.classList.replace('text-slate-400','text-blue-600');
+        
+        // Haptic при переключении табов
+        if(S.settings && S.settings.haptic) tg.HapticFeedback.selectionChanged();
     },
 
     toggleSetup(show) {
@@ -279,6 +350,7 @@ const UI = {
         if(show) {
             el.classList.remove('hidden');
             if(closeBtn) closeBtn.classList.add('hidden');
+            tg.BackButton.hide(); // Прячем кнопку "Назад" на экране настройки
         } else {
             el.classList.add('hidden');
         }
@@ -289,6 +361,7 @@ const UI = {
         el.classList.remove('hidden');
         const closeBtn = document.getElementById('close-setup-btn');
         if(closeBtn) closeBtn.classList.remove('hidden');
+        
         document.getElementById('setup-name').value = S.name;
         document.getElementById('setup-weight').value = S.weight;
         document.getElementById('setup-height').value = S.height;
@@ -428,7 +501,6 @@ const UI = {
         if(id === 't5') return S.xp >= 1000;
         if(id === 't6') return S.streak >= 7;
         if(id === 't8') return Math.floor(S.xp/1000)+1 >= 10;
-        // Исправлено: защита от undefined, если целей еще нет
         if(id === 't9') return (S.goals['pull'] || 3) >= 12;
         if(id === 't10') return S.xp >= 3000;
         if(id === 't12') return S.xp >= 10000;
@@ -474,5 +546,5 @@ const Data = {
     }
 };
 
-// Start
+// Start App
 App.init();
